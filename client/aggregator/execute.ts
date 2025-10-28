@@ -59,9 +59,10 @@ export async function ensureAllowance(
   needed: bigint,
   onStatusChange?: (status: "checking" | "approving" | "confirming" | "complete") => void,
 ) {
+  let current = 0n;
   try {
     onStatusChange?.("checking");
-    const current = (await pc.readContract({
+    current = (await pc.readContract({
       address: token,
       abi: ERC20_ABI,
       functionName: "allowance",
@@ -79,6 +80,22 @@ export async function ensureAllowance(
 
   console.log("📝 Requesting token approval...");
   onStatusChange?.("approving");
+
+  // Some tokens (USDT, KTA, etc.) don't allow changing allowance from non-zero to non-zero
+  // Reset to 0 first if current allowance is non-zero
+  if (current > 0n) {
+    console.log(`📝 Resetting allowance to 0 first (current: ${current.toString()})`);
+    const resetHash = await writeContractAsync({
+      address: token,
+      abi: ERC20_ABI,
+      functionName: "approve",
+      args: [spender, 0n],
+    });
+    console.log(`⏳ Waiting for reset transaction: ${resetHash}`);
+    await pc.waitForTransactionReceipt({ hash: resetHash as `0x${string}` });
+    console.log("✅ Allowance reset to 0");
+  }
+
   const hash = await writeContractAsync({
     address: token,
     abi: ERC20_ABI,
