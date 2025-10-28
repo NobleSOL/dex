@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import TokenInput, { Token } from "@/components/swap/TokenInput";
 import TokenSelector from "@/components/swap/TokenSelector";
+import QuickFill from "@/components/shared/QuickFill";
 import { Button } from "@/components/ui/button";
 import { ArrowDownUp } from "lucide-react";
 import { tokenBySymbol } from "@/lib/tokens";
@@ -608,154 +609,136 @@ export default function Pool() {
   };
 
   const handleRemoveLiquidity = async () => {
-    if (version === "v2") {
-      const addrs = v2Addresses();
-      if (!addrs || !publicClient || !address) {
-        toast({
-          title: "Configuration Error",
-          description: "Missing configuration or wallet not connected",
-          variant: "destructive",
-        });
-        return;
-      }
+    if (!publicClient || !address || !pairAddress || !lpBalance) return;
 
-      if (!pairAddress || !lpBalance || lpBalance === 0n) {
-        toast({
-          title: "No Position",
-          description: "You don't have any LP tokens for this pool",
-          variant: "destructive",
-        });
-        return;
-      }
+    const addrs = v2Addresses();
+    if (!addrs) return;
 
-      // Use amtA as the percentage or LP token amount to remove
-      const lpToRemove = amtA ? parseUnits(amtA, 18) : 0n;
-      if (lpToRemove === 0n || lpToRemove > lpBalance) {
-        toast({
-          title: "Invalid Amount",
-          description: "Please enter a valid LP token amount to remove",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      try {
-        setIsWriting(true);
-
-        // Calculate minimum amounts with slippage
-        const slippageMultiplier = 1 - slippage / 100;
-
-        // Calculate expected token amounts based on LP share
-        const shareOfPool = Number(lpToRemove) / Number(lpTotalSupply || 1n);
-        const expectedA = BigInt(Math.floor(Number(reserves?.reserveA || 0n) * shareOfPool));
-        const expectedB = BigInt(Math.floor(Number(reserves?.reserveB || 0n) * shareOfPool));
-
-        const minA = BigInt(Math.floor(Number(expectedA) * slippageMultiplier));
-        const minB = BigInt(Math.floor(Number(expectedB) * slippageMultiplier));
-
-        // Deadline: 20 minutes from now
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 20 * 60);
-
-        // Approve LP tokens to router
-        toast({
-          title: "Approval Required",
-          description: "Approving LP tokens...",
-        });
-
-        const approvalHash = await writeContractAsync({
-          address: pairAddress as `0x${string}`,
-          abi: PAIR_ABI,
-          functionName: "approve",
-          args: [addrs.router, lpToRemove],
-        });
-
-        await publicClient.waitForTransactionReceipt({ hash: approvalHash as `0x${string}` });
-
-        // Remove liquidity
-        toast({
-          title: "Removing Liquidity",
-          description: "Confirm the transaction in your wallet...",
-        });
-
-        const isEthA = tokenA.symbol.toUpperCase() === "ETH";
-        const isEthB = tokenB.symbol.toUpperCase() === "ETH";
-
-        let removeHash: string;
-
-        if (isEthA || isEthB) {
-          // One token is ETH - use removeLiquidityETH
-          const otherToken = isEthA ? tokenB : tokenA;
-          const otherAddr = isEthA
-            ? (tokenB.address === ETH_SENTINEL ? WETH_ADDRESS : tokenB.address)
-            : (tokenA.address === ETH_SENTINEL ? WETH_ADDRESS : tokenA.address);
-          const minToken = isEthA ? minB : minA;
-          const minETH = isEthA ? minA : minB;
-
-          removeHash = await writeContractAsync({
-            address: addrs.router,
-            abi: v2Abi.router,
-            functionName: "removeLiquidityETH",
-            args: [otherAddr as `0x${string}`, lpToRemove, minToken, minETH, address, deadline],
-          });
-        } else {
-          // Both tokens are ERC20 - use removeLiquidity
-          const addrA = tokenA.address === ETH_SENTINEL ? WETH_ADDRESS : tokenA.address;
-          const addrB = tokenB.address === ETH_SENTINEL ? WETH_ADDRESS : tokenB.address;
-
-          removeHash = await writeContractAsync({
-            address: addrs.router,
-            abi: v2Abi.router,
-            functionName: "removeLiquidity",
-            args: [addrA as `0x${string}`, addrB as `0x${string}`, lpToRemove, minA, minB, address, deadline],
-          });
-        }
-
-        const explorerUrl = `https://basescan.org/tx/${removeHash}`;
-        toast({
-          title: "Transaction Submitted",
-          description: (
-            <div className="flex flex-col gap-1">
-              <span>Waiting for confirmation...</span>
-              <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="text-sky-400 underline text-xs">
-                View on Basescan
-              </a>
-            </div>
-          ),
-        });
-
-        await publicClient.waitForTransactionReceipt({ hash: removeHash as `0x${string}` });
-
-        // Refetch after successful removal
-        setRefetchTrigger((prev) => prev + 1);
-
-        toast({
-          title: "Success!",
-          description: (
-            <div className="flex flex-col gap-1">
-              <span>Liquidity removed successfully!</span>
-              <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="text-sky-400 underline text-xs">
-                View on Basescan
-              </a>
-            </div>
-          ),
-        });
-
-        // Clear inputs
-        setAmtA("");
-        setAmtB("");
-      } catch (error: any) {
-        toast({
-          title: "Transaction Failed",
-          description: error?.shortMessage || error?.message || String(error),
-          variant: "destructive",
-        });
-      } finally {
-        setIsWriting(false);
-      }
-    } else {
+    // Calculate percentage from LP amount selected
+    const lpToRemove = amtA ? parseUnits(amtA, 18) : 0n;
+    if (lpToRemove === 0n || lpToRemove > lpBalance) {
       toast({
-        title: "Not Implemented",
-        description: "V3 remove liquidity not yet implemented",
+        title: "Invalid Amount",
+        description: "Please select a valid amount to remove",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const percentage = Number((lpToRemove * 100n) / lpBalance);
+
+      // Fetch fresh reserves to calculate correct minimum amounts
+      const freshReserves = await publicClient.readContract({
+        address: pairAddress as `0x${string}`,
+        abi: PAIR_ABI,
+        functionName: "getReserves",
+      }) as any;
+
+      const totalSupply = await publicClient.readContract({
+        address: pairAddress as `0x${string}`,
+        abi: PAIR_ABI,
+        functionName: "totalSupply",
+      }) as bigint;
+
+      // Calculate expected amounts based on current reserves
+      const reserve0 = BigInt(freshReserves[0]);
+      const reserve1 = BigInt(freshReserves[1]);
+      const amount0Expected = (lpToRemove * reserve0) / totalSupply;
+      const amount1Expected = (lpToRemove * reserve1) / totalSupply;
+
+      // Apply 5% slippage to expected amounts
+      const amount0Min = (amount0Expected * 95n) / 100n;
+      const amount1Min = (amount1Expected * 95n) / 100n;
+
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 300); // 5 minutes
+
+      // Approve router to spend LP tokens
+      toast({
+        title: "Approving LP tokens...",
+        description: "Please confirm the approval transaction",
+      });
+
+      const approveTx = await writeContractAsync({
+        address: pairAddress as `0x${string}`,
+        abi: PAIR_ABI,
+        functionName: "approve",
+        args: [addrs.router, lpToRemove],
+      });
+
+      await publicClient.waitForTransactionReceipt({ hash: approveTx as `0x${string}` });
+
+      toast({
+        title: "Removing liquidity...",
+        description: "Please confirm the transaction",
+      });
+
+      // Determine token addresses (handle ETH/WETH)
+      const token0Addr = tokenA.address === ETH_SENTINEL ? WETH_ADDRESS : tokenA.address;
+      const token1Addr = tokenB.address === ETH_SENTINEL ? WETH_ADDRESS : tokenB.address;
+
+      // Remove liquidity
+      const tx = await writeContractAsync({
+        address: addrs.router,
+        abi: v2Abi.router,
+        functionName: "removeLiquidity",
+        args: [
+          token0Addr as `0x${string}`,
+          token1Addr as `0x${string}`,
+          lpToRemove,
+          amount0Min,
+          amount1Min,
+          address,
+          deadline,
+        ],
+      });
+
+      const explorerUrl = `https://basescan.org/tx/${tx}`;
+      toast({
+        title: "Transaction Submitted",
+        description: (
+          <div className="flex flex-col gap-1">
+            <span>Waiting for confirmation...</span>
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400 underline text-xs"
+            >
+              View on Basescan
+            </a>
+          </div>
+        ),
+      });
+
+      await publicClient.waitForTransactionReceipt({ hash: tx as `0x${string}` });
+
+      toast({
+        title: "Liquidity Removed!",
+        description: (
+          <div className="flex flex-col gap-1">
+            <span>Successfully removed {percentage.toFixed(0)}% of your liquidity</span>
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sky-400 underline text-xs"
+            >
+              View on Basescan
+            </a>
+          </div>
+        ),
+      });
+
+      // Refresh positions
+      setRefetchTrigger((prev) => prev + 1);
+      setAmtA("");
+      setAmtB("");
+    } catch (error: any) {
+      console.error("Remove liquidity error:", error);
+      toast({
+        title: "Remove Liquidity Failed",
+        description: error?.shortMessage || error?.message || String(error),
         variant: "destructive",
       });
     }
@@ -869,38 +852,99 @@ export default function Pool() {
           </div>
 
           <div className="space-y-3">
-            <TokenInput
-              label={mode === "add" ? "Token A" : "Remove A"}
-              token={tokenA}
-              amount={amtA}
-              onAmountChange={(val) => {
-                setAmtA(val);
-                setLastEditedField("A");
-              }}
-              onTokenClick={() => setSelecting("A")}
-              balance={balA}
-            />
-            <div className="flex items-center justify-center py-1">
-              <Button
-                variant="secondary"
-                size="icon"
-                onClick={handleFlip}
-                aria-label="Switch tokens"
-              >
-                <ArrowDownUp />
-              </Button>
-            </div>
-            <TokenInput
-              label={mode === "add" ? "Token B" : "Remove B"}
-              token={tokenB}
-              amount={amtB}
-              onAmountChange={(val) => {
-                setAmtB(val);
-                setLastEditedField("B");
-              }}
-              onTokenClick={() => setSelecting("B")}
-              balance={balB}
-            />
+            {mode === "add" ? (
+              <>
+                <TokenInput
+                  label="Token A"
+                  token={tokenA}
+                  amount={amtA}
+                  onAmountChange={(val) => {
+                    setAmtA(val);
+                    setLastEditedField("A");
+                  }}
+                  onTokenClick={() => setSelecting("A")}
+                  balance={balA}
+                />
+                <div className="flex items-center justify-center py-1">
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={handleFlip}
+                    aria-label="Switch tokens"
+                  >
+                    <ArrowDownUp />
+                  </Button>
+                </div>
+                <TokenInput
+                  label="Token B"
+                  token={tokenB}
+                  amount={amtB}
+                  onAmountChange={(val) => {
+                    setAmtB(val);
+                    setLastEditedField("B");
+                  }}
+                  onTokenClick={() => setSelecting("B")}
+                  balance={balB}
+                />
+              </>
+            ) : (
+              <>
+                {/* Remove mode - show percentage selector */}
+                {lpBalance && lpBalance > 0n && reserves && lpTotalSupply ? (
+                  <div className="rounded-lg bg-secondary/40 border border-border/40 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium">Your LP Position</span>
+                      <span className="text-sm font-mono">
+                        {Number(formatUnits(lpBalance, 18)).toFixed(6)} LP
+                      </span>
+                    </div>
+
+                    <div className="mb-3">
+                      <QuickFill
+                        balance={Number(formatUnits(lpBalance, 18))}
+                        onSelect={(val) => setAmtA(val)}
+                        percents={[25, 50, 75, 100]}
+                      />
+                    </div>
+
+                    {/* Show expected token outputs when amount is selected */}
+                    {amtA && Number(amtA) > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
+                        <div className="text-xs text-muted-foreground mb-2">You will receive:</div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{tokenA.symbol}</span>
+                          <span className="text-sm font-mono">
+                            {(() => {
+                              const lpToRemove = parseUnits(amtA, 18);
+                              const shareOfPool = Number(lpToRemove) / Number(lpTotalSupply);
+                              const expectedA = BigInt(Math.floor(Number(reserves.reserveA) * shareOfPool));
+                              return Number(formatUnits(expectedA, tokenA.decimals ?? 18)).toFixed(6);
+                            })()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{tokenB.symbol}</span>
+                          <span className="text-sm font-mono">
+                            {(() => {
+                              const lpToRemove = parseUnits(amtA, 18);
+                              const shareOfPool = Number(lpToRemove) / Number(lpTotalSupply);
+                              const expectedB = BigInt(Math.floor(Number(reserves.reserveB) * shareOfPool));
+                              return Number(formatUnits(expectedB, tokenB.decimals ?? 18)).toFixed(6);
+                            })()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-secondary/40 border border-border/40 p-4 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {!pairAddress ? "Select a pool pair to manage" : "You don't have any LP tokens for this pool"}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <Button
@@ -924,25 +968,13 @@ export default function Pool() {
 
           {!isConnected && (
             <p className="mt-3 text-xs text-center text-muted-foreground">
-              Connect your wallet to add liquidity to pools
+              Connect your wallet to {mode === "add" ? "add liquidity" : "manage your positions"}
             </p>
           )}
 
           {isConnected && !pairAddress && mode === "add" && (
             <p className="mt-3 text-xs text-center text-muted-foreground">
               This pool doesn't exist yet. Click "Create V2 Pair" to create it.
-            </p>
-          )}
-
-          {isConnected && mode === "remove" && lpBalance && lpBalance > 0n && (
-            <p className="mt-3 text-xs text-center text-muted-foreground">
-              Your LP Balance: {Number(formatUnits(lpBalance, 18)).toFixed(6)} LP tokens
-            </p>
-          )}
-
-          {isConnected && mode === "remove" && (!lpBalance || lpBalance === 0n) && pairAddress && (
-            <p className="mt-3 text-xs text-center text-muted-foreground text-amber-400">
-              You don't have any LP tokens for this pool
             </p>
           )}
         </div>
