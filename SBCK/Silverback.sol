@@ -207,7 +207,7 @@ contract Silverback is IERC20, Ownable {
     /*                                   states                                   */
     /* -------------------------------------------------------------------------- */
     ISilverbackRouter public constant SILVERBACK_ROUTER =
-        ISilverbackRouter(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+        ISilverbackRouter(0xd7CC86608843179380778823F939f809E7aD5e90);
     address public immutable SILVERBACK_PAIR;
 
     struct Fee {
