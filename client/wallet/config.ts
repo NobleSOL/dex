@@ -57,6 +57,13 @@ export const wagmiConfig = createConfig({
   connectors: [
     injected({
       shimDisconnect: true,
+      target() {
+        return {
+          id: 'injected',
+          name: appName,
+          provider: typeof window !== 'undefined' ? window.ethereum : undefined,
+        };
+      },
     }),
     ...(enableCoinbase
       ? [coinbaseWallet({
