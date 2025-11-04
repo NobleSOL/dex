@@ -12,7 +12,7 @@ const baseRpc = primaryRpc || "https://mainnet.base.org";
 const appOrigin = typeof window !== "undefined" ? window.location.origin : "";
 const appName = "Silverback DEX";
 const appDescription =
-  "Official Silverback DEX — Trade on Base with deep liquidity and MEV-aware routing. Always verify you are connected to the official Silverback website.";
+  "Silverback DEX - Decentralized Exchange on Base. Official domain: silverbackdefi.app";
 const appIcon =
   "https://cdn.builder.io/api/v1/image/assets%2Fd70091a6f5494e0195b033a72f7e79ae%2Fee3a0a5652aa480f9aa42277503e94b2?format=webp&width=256";
 
@@ -63,6 +63,10 @@ export const wagmiConfig = createConfig({
           appName,
           appLogoUrl: appIcon,
           preference: 'smartWalletOnly',
+          // Explicitly set attribution to prevent domain warnings
+          attribution: {
+            auto: false,
+          },
         })]
       : []),
     ...(enableWalletConnect
