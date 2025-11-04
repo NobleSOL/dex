@@ -818,13 +818,6 @@ export default function Pool() {
             <div className="flex items-center gap-3 sm:self-auto">
               <button
                 type="button"
-                className="rounded-lg bg-secondary/60 border border-border/40 px-3 py-1.5 text-xs font-medium hover:bg-secondary/80 transition-all"
-                onClick={handleCreatePool}
-              >
-                Create Pool
-              </button>
-              <button
-                type="button"
                 className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium"
                 onClick={() =>
                   document.dispatchEvent(new Event("sb:open-slippage"))
