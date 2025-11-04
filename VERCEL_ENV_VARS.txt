@@ -1,8 +1,8 @@
 # Vercel Environment Variables for Base Mainnet
 
-VITE_SB_V2_FACTORY=0xF925941026a46244dFFC236F2A01F1282ecFFa6d
-VITE_SB_UNIFIED_ROUTER=0x46CC63663a5f7bD17c664BfFe35546f13B788303
-VITE_SB_V2_ROUTER=0x46CC63663a5f7bD17c664BfFe35546f13B788303
+VITE_SB_V2_FACTORY=0xd0918593070682AA60Ef6367FAd43A20acaEE94d
+VITE_SB_UNIFIED_ROUTER=0x565cBf0F3eAdD873212Db91896e9a548f6D64894
+VITE_SB_V2_ROUTER=0x565cBf0F3eAdD873212Db91896e9a548f6D64894
 VITE_BASE_RPC_URL=https://base-rpc.publicnode.com
 VITE_WALLETCONNECT_PROJECT_ID=86bed0a1ba9e6377878f051d2f9ed388
 VITE_WC_ALLOWED_ORIGINS=https://www.silverbackdefi.app
@@ -12,7 +12,7 @@ VITE_ZEROEX_API_KEY=bca0f052-aa83-4f59-a69c-145873892a85
 
 # Notes:
 # - All addresses are for Base Mainnet (Chain ID: 8453)
-# - Factory verified: https://basescan.org/address/0xF925941026a46244dFFC236F2A01F1282ecFFa6d
-# - Router: https://basescan.org/address/0x46CC63663a5f7bD17c664BfFe35546f13B788303 (awaiting verification)
+# - Factory verified: https://basescan.org/address/0xd0918593070682AA60Ef6367FAd43A20acaEE94d
+# - Router verified: https://basescan.org/address/0x565cBf0F3eAdD873212Db91896e9a548f6D64894
 # - Protocol fee: 0.3% (immutable) to 0xD34411a70EffbDd000c529bbF572082ffDcF1794 (immutable)
-# - Router is IMMUTABLE UnifiedRouter - no admin functions, includes OpenOcean aggregator support
+# - Router is IMMUTABLE RouterV3 - no admin functions, protocol fee collected before swaps
